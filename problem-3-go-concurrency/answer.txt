@@ -1,0 +1,20 @@
+How the constructs work ?
+make(chan func(), 10) creates a buffered channel to hold functionsand for f := range cnp { f() } lets goroutines continuously pick and execute them
+This allows sending work (functins) to be excuted asynchronously by multiple goroutines
+
+
+Use-cases ?
+Building worker pool to process multiple tasks concurrently
+Running callback functions or queued jobs without blocking the main program  flow
+
+Significance of the 4-iteration for loop ?
+Starts four worker goroutines to handle tasks in parallel
+Acts as a fixed-size worker pool to prevent too many tasks from executing at once
+
+Significance of make(chan func(), 10) !!
+Buffered channel allows sending tasks withot waiting for immediate execution
+Queues multiple functions efficiently and prevents deadlocks when producers are faster than consumers.
+
+Why “HERE1” is not printed ?
+main() exits immediately after printing Hello, stopping all goroutines
+Without synchronization (e.g., WaitGroup), the function in the channel never gets executed
