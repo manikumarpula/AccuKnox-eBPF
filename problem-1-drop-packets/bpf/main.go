@@ -1,6 +1,7 @@
 package main
 
 import (
+        "flag"
         "log"
         "net"
         "os"
@@ -11,37 +12,39 @@ import (
 )
 
 func main() {
-        stop := make(chan os.Signal, 1)
-        signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+        ifaceName := flag.String("iface", "lo", "Network interface to attach")
+        port := flag.Int("port", 4040, "TCP port to drop")
+        flag.Parse()
 
-        ifaceName := "lo" // Use the loopback interface for testing
-        iface, err := net.InterfaceByName(ifaceName)
-        if err != nil {
-                log.Fatalf("Getting interface %s failed: %s", ifaceName, err)
-        }
-
-        // This uses the generated function from dropper_bpf.go
         objs := dropperObjects{}
         if err := loadDropperObjects(&objs, nil); err != nil {
-                log.Fatalf("Loading eBPF objects failed: %s", err)
+                log.Fatalf("loading objects: %v", err)
         }
-        defer objs.Close()
 
-        // Attach the XDP program to the network interface
-        l, err := link.AttachXDP(link.XDPOptions{
+        key := uint32(0)
+        val := uint32(*port)
+        if err := objs.TargetPortMap.Put(key, val); err != nil {
+                log.Fatalf("writing target port to map failed: %v", err)
+        }
+        log.Printf("Configured dropper to block TCP port %d\n", *port)
+
+        iface, err := net.InterfaceByName(*ifaceName)
+        if err != nil {
+                log.Fatalf("getting interface %q: %v", *ifaceName, err)
+        }
+
+        _, err = link.AttachXDP(link.XDPOptions{
                 Program:   objs.DropTcpPort,
                 Interface: iface.Index,
         })
         if err != nil {
-                log.Fatalf("Attaching XDP program failed: %s", err)
+                log.Fatalf("attaching XDP: %v", err)
         }
-        defer l.Close()
 
-        log.Printf("XDP program attached to %s. Dropping TCP packets on port 4040.", ifaceName)
-        log.Println("Press Ctrl+C to stop.")
+        log.Printf("XDP program attached to %s. Press Ctrl+C to stop.", *ifaceName)
 
-        // Wait for a stop signal
+        stop := make(chan os.Signal, 1)
+        signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
         <-stop
 
-        log.Println("Program stopped.")
 }
